@@ -1,8 +1,10 @@
 """
-NBA Hall of Famer Betting Analysis - v2
-- No odds API (removed)
+NBA Hall of Famer Betting Analysis - v3
+- No odds API
+- No referee crew input (removed)
 - Player dropdowns auto-populate from team selection
 - Stat projections for every selected player
+- Hardened against cloud-host blocking via retry logic in nba_data.py
 """
 
 import os
@@ -28,7 +30,7 @@ from nba_data import (
 from claude_analyzer import analyze_game
 
 
-app = FastAPI(title="NBA Hall of Famer v2")
+app = FastAPI(title="NBA Hall of Famer v3")
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -45,10 +47,7 @@ async def home(request: Request):
 
 @app.get("/api/roster/{team_id}")
 async def api_get_roster(team_id: int):
-    """
-    Return roster for a team (used by frontend JS to populate
-    the player dropdowns when user picks a team).
-    """
+    """Return roster for a team. Used by frontend JS to populate player buttons."""
     roster = get_team_roster(team_id)
     return [{
         "id": p.get("PLAYER_ID"),
@@ -62,24 +61,14 @@ async def analyze(
     request: Request,
     home_team_id: int = Form(...),
     away_team_id: int = Form(...),
-    home_starters: str = Form(...),  # comma-separated player IDs
+    home_starters: str = Form(...),
     away_starters: str = Form(...),
-    home_extra_players: str = Form(""),  # extra players to project (optional)
+    home_extra_players: str = Form(""),
     away_extra_players: str = Form(""),
-    crew_chief: str = Form(...),
-    referee: str = Form(...),
-    umpire: str = Form(...),
 ):
-    """
-    Run the full analysis pipeline:
-    1. Gather NBA data (rosters, stats, rotations)
-    2. For every selected player: pull last-10-game averages
-    3. Send everything to Claude
-    4. Display projections + verdicts
-    """
+    """Run the full analysis pipeline."""
     
     try:
-        # Get team info
         all_teams = get_all_teams()
         home_team = next((t for t in all_teams if t['id'] == home_team_id), None)
         away_team = next((t for t in all_teams if t['id'] == away_team_id), None)
@@ -87,7 +76,6 @@ async def analyze(
         if not home_team or not away_team:
             raise HTTPException(status_code=400, detail="Invalid team selection")
         
-        # Parse selected player IDs
         def parse_ids(s):
             return [int(x.strip()) for x in s.split(",") if x.strip().isdigit()]
         
@@ -105,19 +93,16 @@ async def analyze(
                 detail="Must select at least one player for each team"
             )
         
-        # Get rosters (for name lookups)
         home_roster = get_team_roster(home_team_id)
         away_roster = get_team_roster(away_team_id)
         home_id_to_name = {p['PLAYER_ID']: p['PLAYER'] for p in home_roster}
         away_id_to_name = {p['PLAYER_ID']: p['PLAYER'] for p in away_roster}
         
-        # Get team-level data
         home_team_stats = get_team_season_stats(home_team_id)
         away_team_stats = get_team_season_stats(away_team_id)
-        home_rotation = get_simplified_rotation(home_team_id, n_games=10)
-        away_rotation = get_simplified_rotation(away_team_id, n_games=10)
+        home_rotation = get_simplified_rotation(home_team_id, n_games=5)
+        away_rotation = get_simplified_rotation(away_team_id, n_games=5)
         
-        # For every selected player, pull recent averages (this is THE core data)
         home_player_data = []
         for pid in all_home_player_ids:
             name = home_id_to_name.get(pid, f"Player {pid}")
@@ -140,12 +125,12 @@ async def analyze(
                 "recent_averages_last_10": recent,
             })
         
-        # Build the analysis input — NO ODDS DATA
+        # Build the analysis input — NO ODDS, NO REFS
         game_data = {
             "meta": {
                 "generated_at_utc": datetime.utcnow().isoformat(),
                 "mode": "PRE_GAME",
-                "version": "v2_no_odds",
+                "version": "v3_no_odds_no_refs",
             },
             "game": {
                 "home_team": home_team['full_name'],
@@ -166,22 +151,14 @@ async def analyze(
                 "rotation_profile": away_rotation,
                 "selected_players": away_player_data,
             },
-            "ref_crew": {
-                "crew_chief": crew_chief,
-                "referee": referee,
-                "umpire": umpire,
-                "note": "No historical aggregate data available — use league-average tendencies."
-            },
             "user_state": {
                 "bankroll_current": 1000,
                 "kelly_fraction": 0.25,
             }
         }
         
-        # Send to Claude
         analysis = analyze_game(game_data)
         
-        # Render output
         return templates.TemplateResponse(request, "output.html", {
             "analysis": analysis,
             "home_team": home_team['full_name'],
@@ -201,5 +178,5 @@ async def health():
     return {
         "status": "ok",
         "anthropic_configured": bool(os.getenv("ANTHROPIC_API_KEY")),
-        "version": "v2_no_odds",
+        "version": "v3_no_odds_no_refs",
     }
