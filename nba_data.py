@@ -41,24 +41,18 @@ def get_all_teams() -> List[Dict]:
 
 
 def get_team_by_name(name: str) -> Optional[Dict]:
-    """
-    Find team by partial name match (case insensitive).
-    e.g., 'lakers' -> Lakers team dict
-    """
+    """Find team by partial name match (case insensitive)."""
     name = name.lower().strip()
     teams = get_all_teams()
     
-    # Exact match first
     for team in teams:
         if team['nickname'].lower() == name or team['full_name'].lower() == name:
             return team
     
-    # Partial match
     for team in teams:
         if name in team['full_name'].lower() or name in team['nickname'].lower():
             return team
     
-    # Abbreviation
     for team in teams:
         if team['abbreviation'].lower() == name:
             return team
@@ -90,7 +84,7 @@ def get_player_season_stats(player_id: int) -> Optional[Dict]:
             headers=NBA_API_HEADERS,
             timeout=30
         )
-        df = profile.get_data_frames()[0]  # SeasonTotalsRegularSeason
+        df = profile.get_data_frames()[0]
         if len(df) > 0:
             current = df.iloc[-1].to_dict()
             return current
@@ -115,6 +109,57 @@ def get_player_last_n_games(player_id: int, n: int = 30) -> List[Dict]:
     except Exception as e:
         print(f"Error fetching games for player {player_id}: {e}")
         return []
+
+
+def get_player_recent_averages(player_id: int, n: int = 10) -> Dict:
+    """
+    Get recent averages for a player across last N games.
+    Returns averages for all major stats — this is what the
+    AI uses to make stat projections.
+    """
+    games = get_player_last_n_games(player_id, n=n)
+    if not games:
+        return {}
+    
+    def avg(field):
+        vals = [g.get(field, 0) or 0 for g in games]
+        return round(sum(vals) / len(vals), 2) if vals else 0
+    
+    def median(field):
+        vals = sorted([g.get(field, 0) or 0 for g in games])
+        return vals[len(vals) // 2] if vals else 0
+    
+    def min_max(field):
+        vals = [g.get(field, 0) or 0 for g in games]
+        return {'min': min(vals), 'max': max(vals)} if vals else {'min': 0, 'max': 0}
+    
+    return {
+        'sample_size': len(games),
+        'minutes': {'avg': avg('MIN'), 'median': median('MIN'), **min_max('MIN')},
+        'points': {'avg': avg('PTS'), 'median': median('PTS'), **min_max('PTS')},
+        'rebounds': {'avg': avg('REB'), 'median': median('REB'), **min_max('REB')},
+        'assists': {'avg': avg('AST'), 'median': median('AST'), **min_max('AST')},
+        'steals': {'avg': avg('STL'), 'median': median('STL'), **min_max('STL')},
+        'blocks': {'avg': avg('BLK'), 'median': median('BLK'), **min_max('BLK')},
+        'threes_made': {'avg': avg('FG3M'), 'median': median('FG3M'), **min_max('FG3M')},
+        'fg_pct': avg('FG_PCT'),
+        'three_pct': avg('FG3_PCT'),
+        'ft_pct': avg('FT_PCT'),
+        'ftas': {'avg': avg('FTA'), 'median': median('FTA')},
+        'turnovers': {'avg': avg('TOV'), 'median': median('TOV')},
+        'plus_minus': avg('PLUS_MINUS'),
+        'recent_games_summary': [
+            {
+                'date': g.get('GAME_DATE'),
+                'matchup': g.get('MATCHUP'),
+                'min': g.get('MIN'),
+                'pts': g.get('PTS'),
+                'reb': g.get('REB'),
+                'ast': g.get('AST'),
+                'fg3m': g.get('FG3M'),
+            } for g in games[:10]
+        ]
+    }
 
 
 def get_team_last_n_games(team_id: int, n: int = 10) -> List[Dict]:
@@ -152,77 +197,36 @@ def get_team_season_stats(team_id: int) -> Optional[Dict]:
         return None
 
 
-def compute_base_rate(player_id: int, prop_type: str, line_value: float, n_games: int = 30) -> Dict:
-    """
-    Compute base rate: how often has player gone over this line in last N games?
-    Returns: {'base_rate': 0.63, 'hits': 19, 'sample_size': 30}
-    """
-    games = get_player_last_n_games(player_id, n=n_games)
-    
-    if not games:
-        return {'base_rate': None, 'hits': 0, 'sample_size': 0}
-    
-    # Map prop_type to stat field
-    stat_map = {
-        'points': 'PTS',
-        'rebounds': 'REB',
-        'assists': 'AST',
-        'threes_made': 'FG3M',
-        'blocks': 'BLK',
-        'steals': 'STL',
-    }
-    
-    if prop_type == 'pra':
-        stat_values = [g.get('PTS', 0) + g.get('REB', 0) + g.get('AST', 0) for g in games]
-    else:
-        stat_field = stat_map.get(prop_type)
-        if not stat_field:
-            return {'base_rate': None, 'hits': 0, 'sample_size': 0}
-        stat_values = [g.get(stat_field, 0) for g in games]
-    
-    hits = sum(1 for v in stat_values if v > line_value)
-    
-    return {
-        'base_rate': round(hits / len(games), 4),
-        'hits': hits,
-        'sample_size': len(games),
-        'recent_values': stat_values[:10]  # last 10 games for context
-    }
-
-
 def get_simplified_rotation(team_id: int, n_games: int = 10) -> Dict:
     """
     Build a simplified rotation profile from last N team games.
-    Returns minutes distribution per player and basic flags.
+    Returns minutes distribution per player.
     """
     games = get_team_last_n_games(team_id, n=n_games)
     if not games:
         return {'sample_size_games': 0, 'minutes_distribution': {}, 'is_simplified': True}
     
-    # For each game, get box score and accumulate per-player minutes
-    player_minutes = {}  # player_id -> [list of minutes]
-    player_names = {}   # player_id -> name
+    player_minutes = {}
+    player_names = {}
     
     for game in games[:n_games]:
         game_id = game.get('Game_ID')
         if not game_id:
             continue
         try:
-            time.sleep(0.5)  # rate limit politeness
+            time.sleep(0.5)
             box = boxscoretraditionalv2.BoxScoreTraditionalV2(
                 game_id=game_id,
                 headers=NBA_API_HEADERS,
                 timeout=30
             )
-            df = box.get_data_frames()[0]  # PlayerStats
+            df = box.get_data_frames()[0]
             team_df = df[df['TEAM_ID'] == team_id]
             
             for _, row in team_df.iterrows():
                 pid = row['PLAYER_ID']
                 pname = row['PLAYER_NAME']
                 minutes = row.get('MIN', '0')
-                
-                # MIN is sometimes "MM:SS" or "MM" or None
                 mins_value = parse_minutes(minutes)
                 
                 if pid not in player_minutes:
@@ -233,7 +237,6 @@ def get_simplified_rotation(team_id: int, n_games: int = 10) -> Dict:
             print(f"Error fetching boxscore for {game_id}: {e}")
             continue
     
-    # Build distribution
     distribution = {}
     for pid, mins_list in player_minutes.items():
         if not mins_list:
@@ -241,7 +244,7 @@ def get_simplified_rotation(team_id: int, n_games: int = 10) -> Dict:
         sorted_mins = sorted(mins_list)
         avg = sum(mins_list) / len(mins_list)
         median = sorted_mins[len(sorted_mins) // 2]
-        floor = sorted_mins[0] if len(sorted_mins) <= 3 else sorted_mins[1]  # 2nd lowest as floor
+        floor = sorted_mins[0] if len(sorted_mins) <= 3 else sorted_mins[1]
         
         distribution[pid] = {
             'player_name': player_names[pid],
@@ -252,7 +255,6 @@ def get_simplified_rotation(team_id: int, n_games: int = 10) -> Dict:
             'games_played': len(mins_list),
         }
     
-    # Filter to top 8-10 by average minutes
     top_players = sorted(distribution.items(), key=lambda x: x[1]['avg_minutes'], reverse=True)[:10]
     
     return {
@@ -263,7 +265,7 @@ def get_simplified_rotation(team_id: int, n_games: int = 10) -> Dict:
 
 
 def parse_minutes(min_value) -> float:
-    """Parse minutes from NBA format which can be 'MM:SS', 'MM.SS', or float."""
+    """Parse minutes from NBA format (MM:SS, MM, or float)."""
     if min_value is None or min_value == '':
         return 0.0
     if isinstance(min_value, (int, float)):
@@ -289,7 +291,7 @@ def get_games_today() -> List[Dict]:
             headers=NBA_API_HEADERS,
             timeout=30
         )
-        df = sb.get_data_frames()[0]  # GameHeader
+        df = sb.get_data_frames()[0]
         return df.to_dict('records')
     except Exception as e:
         print(f"Error fetching today's games: {e}")
