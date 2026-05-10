@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to form</a>
+        <h1>⚠️ Something went wrong</h1>
+        <div class="error-box">
+            <p><strong>Error:</strong> {{ error }}</p>
+            <p>Possible causes:</p>
+            <ul>
+                <li>NBA API rate limit (try again in 1-2 minutes)</li>
+                <li>The Odds API key not set or expired</li>
+                <li>Anthropic API key not set or out of credit</li>
+                <li>Invalid game/team selection</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

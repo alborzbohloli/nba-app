@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NBA Hall of Famer Analysis</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🏀 Hall of Famer Analysis</h1>
+        <p class="subtitle">12-layer NBA betting analysis powered by Claude</p>
+        
+        <form action="/analyze" method="POST" id="analysisForm">
+            
+            <div class="section">
+                <h2>1. Pick the Game</h2>
+                
+                <label for="home_team_id">Home Team</label>
+                <select name="home_team_id" id="home_team_id" required>
+                    <option value="">Select home team...</option>
+                    {% for team in teams %}
+                    <option value="{{ team.id }}">{{ team.full_name }}</option>
+                    {% endfor %}
+                </select>
+                
+                <label for="away_team_id">Away Team</label>
+                <select name="away_team_id" id="away_team_id" required>
+                    <option value="">Select away team...</option>
+                    {% for team in teams %}
+                    <option value="{{ team.id }}">{{ team.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="section">
+                <h2>2. Confirmed Starters</h2>
+                <p class="hint">Type all 5 starter names for each team, separated by commas. (e.g., "LeBron James, Anthony Davis, Austin Reaves, ...")</p>
+                
+                <label for="home_starters">Home Team Starters</label>
+                <textarea name="home_starters" id="home_starters" rows="2" placeholder="Player 1, Player 2, Player 3, Player 4, Player 5" required></textarea>
+                
+                <label for="away_starters">Away Team Starters</label>
+                <textarea name="away_starters" id="away_starters" rows="2" placeholder="Player 1, Player 2, Player 3, Player 4, Player 5" required></textarea>
+            </div>
+            
+            <div class="section">
+                <h2>3. Referee Crew</h2>
+                <p class="hint">Look up at <a href="https://official.nba.com/referee-assignments/" target="_blank">official.nba.com/referee-assignments</a> (~2 hours pre-tip)</p>
+                
+                <label for="crew_chief">Crew Chief</label>
+                <input type="text" name="crew_chief" id="crew_chief" placeholder="e.g., Scott Foster" required>
+                
+                <label for="referee">Referee</label>
+                <input type="text" name="referee" id="referee" placeholder="e.g., Tony Brothers" required>
+                
+                <label for="umpire">Umpire</label>
+                <input type="text" name="umpire" id="umpire" placeholder="e.g., Marc Davis" required>
+            </div>
+            
+            <button type="submit" class="primary-button" id="submitBtn">
+                Run Hall of Famer Analysis
+            </button>
+            <p class="loading-message" id="loadingMessage" style="display:none;">
+                Analyzing... this takes 30-60 seconds. Don't refresh.
+            </p>
+        </form>
+    </div>
+    
+    <script>
+        document.getElementById('analysisForm').addEventListener('submit', function() {
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = 'Analyzing...';
+            document.getElementById('loadingMessage').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

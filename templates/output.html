@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← New Analysis</a>
+        
+        <h1>📊 {{ away_team }} @ {{ home_team }}</h1>
+        
+        {% if analysis.error %}
+        <div class="error-box">
+            <h2>⚠️ Analysis Error</h2>
+            <p>{{ analysis.error }}</p>
+            {% if analysis.raw_response %}
+            <details>
+                <summary>Raw response</summary>
+                <pre>{{ analysis.raw_response }}</pre>
+            </details>
+            {% endif %}
+        </div>
+        {% else %}
+        
+        {% if not has_odds %}
+        <div class="warning-box">
+            ⚠️ No odds data found for this game. Analysis is based on team/player stats only.
+        </div>
+        {% endif %}
+        
+        {% if analysis.summary %}
+        <div class="summary-box">
+            <h2>TL;DR</h2>
+            <p class="tldr">{{ analysis.summary.tldr }}</p>
+            <div class="summary-grid">
+                {% if analysis.summary.predicted_winner %}
+                <div><strong>Predicted Winner:</strong> {{ analysis.summary.predicted_winner }}</div>
+                {% endif %}
+                {% if analysis.summary.predicted_pace %}
+                <div><strong>Pace:</strong> {{ analysis.summary.predicted_pace }}</div>
+                {% endif %}
+                {% if analysis.summary.predicted_competitive %}
+                <div><strong>Game Script:</strong> {{ analysis.summary.predicted_competitive }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if analysis.safe_picks %}
+        <div class="picks-section">
+            <h2>✅ SAFE Picks ({{ analysis.safe_picks|length }})</h2>
+            {% for pick in analysis.safe_picks %}
+            <div class="pick-card tier-{{ pick.confidence_tier|lower|replace('_', '-') }}">
+                <div class="pick-header">
+                    <span class="pick-name">{{ pick.pick }}</span>
+                    <span class="pick-tier">{{ pick.confidence_tier }}</span>
+                </div>
+                <div class="pick-stats">
+                    <div>
+                        <span class="label">Hit Probability:</span>
+                        <span class="value">{{ "%.1f"|format(pick.calibrated_probability * 100) }}%</span>
+                    </div>
+                    {% if pick.base_rate %}
+                    <div>
+                        <span class="label">Base Rate:</span>
+                        <span class="value">{{ "%.1f"|format(pick.base_rate * 100) }}%</span>
+                    </div>
+                    {% endif %}
+                    {% if pick.kelly_pct %}
+                    <div>
+                        <span class="label">Kelly Bet Size:</span>
+                        <span class="value">{{ "%.1f"|format(pick.kelly_pct * 100) }}% of bankroll</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="pick-reasoning">{{ pick.reasoning }}</p>
+                {% if pick.supporting_layers %}
+                <p class="pick-layers">Supporting layers: {{ pick.supporting_layers|join(', ') }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if analysis.game_winner_pick %}
+        <div class="winner-section">
+            <h2>🏆 Game Winner</h2>
+            <div class="pick-card tier-{{ analysis.game_winner_pick.confidence_tier|lower|replace('_', '-') }}">
+                <div class="pick-header">
+                    <span class="pick-name">{{ analysis.game_winner_pick.side }} 
+                        {% if analysis.game_winner_pick.spread %}({{ analysis.game_winner_pick.spread }}){% endif %}
+                    </span>
+                    <span class="pick-tier">{{ analysis.game_winner_pick.confidence_tier }}</span>
+                </div>
+                <div class="pick-stats">
+                    <div>
+                        <span class="label">Win Probability:</span>
+                        <span class="value">{{ "%.1f"|format(analysis.game_winner_pick.win_probability * 100) }}%</span>
+                    </div>
+                    {% if analysis.game_winner_pick.kelly_pct %}
+                    <div>
+                        <span class="label">Kelly Bet:</span>
+                        <span class="value">{{ "%.1f"|format(analysis.game_winner_pick.kelly_pct * 100) }}%</span>
+                    </div>
+                    {% endif %}
+                </div>
+                <p class="pick-reasoning">{{ analysis.game_winner_pick.reasoning }}</p>
+                {% if analysis.game_winner_pick.caveat %}
+                <p class="caveat">⚠️ {{ analysis.game_winner_pick.caveat }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if analysis.avoid_list %}
+        <div class="avoid-section">
+            <h2>❌ Avoid List ({{ analysis.avoid_list|length }})</h2>
+            {% for avoid in analysis.avoid_list %}
+            <div class="avoid-card">
+                <div class="avoid-header">
+                    <span class="avoid-prop">{{ avoid.prop }}</span>
+                    <span class="avoid-code">{{ avoid.reason_code }}</span>
+                </div>
+                <p>{{ avoid.reason }}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% if analysis.layers %}
+        <div class="layers-section">
+            <h2>🔍 12-Layer Analysis</h2>
+            <details>
+                <summary>Click to expand all 12 layers</summary>
+                {% for layer_name, layer_text in analysis.layers.items() %}
+                <div class="layer">
+                    <h3>{{ layer_name|replace('_', ' ')|title }}</h3>
+                    <p>{{ layer_text }}</p>
+                </div>
+                {% endfor %}
+            </details>
+        </div>
+        {% endif %}
+        
+        {% if analysis.assumptions %}
+        <div class="assumptions-section">
+            <h3>📝 Assumptions / Data Gaps</h3>
+            <ul>
+                {% for assumption in analysis.assumptions %}
+                <li>{{ assumption }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        
+        {% endif %}
+        
+        <div class="footer">
+            <p>Props found: {{ props_count }}</p>
+            <p><a href="/">Run another analysis</a></p>
+        </div>
+    </div>
+</body>
+</html>
