@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>NBA Hall of Famer Analysis</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🏀 Hall of Famer Analysis</h1>
+        <p class="subtitle">12-layer NBA stat projections powered by Claude</p>
+        
+        <form action="/analyze" method="POST" id="analysisForm">
+            
+            <div class="section">
+                <h2>1. Pick the Game</h2>
+                
+                <label for="home_team_id">Home Team</label>
+                <select name="home_team_id" id="home_team_id" required>
+                    <option value="">Select home team...</option>
+                    {% for team in teams %}
+                    <option value="{{ team.id }}">{{ team.full_name }}</option>
+                    {% endfor %}
+                </select>
+                
+                <label for="away_team_id">Away Team</label>
+                <select name="away_team_id" id="away_team_id" required>
+                    <option value="">Select away team...</option>
+                    {% for team in teams %}
+                    <option value="{{ team.id }}">{{ team.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="section" id="homePlayersSection" style="display:none;">
+                <h2>2. Home Team Players</h2>
+                <p class="hint">Tap players to select. Pick 5 starters first, then add any extra players you want projections for (key bench guys).</p>
+                
+                <label>Starters (pick 5)</label>
+                <div id="homeStartersList" class="player-list"></div>
+                
+                <label style="margin-top:16px;">Extra players (optional, for bench projections)</label>
+                <div id="homeExtraList" class="player-list"></div>
+                
+                <input type="hidden" name="home_starters" id="home_starters" value="">
+                <input type="hidden" name="home_extra_players" id="home_extra_players" value="">
+            </div>
+            
+            <div class="section" id="awayPlayersSection" style="display:none;">
+                <h2>3. Away Team Players</h2>
+                <p class="hint">Tap players to select. Pick 5 starters, then add any extra players you want projections for.</p>
+                
+                <label>Starters (pick 5)</label>
+                <div id="awayStartersList" class="player-list"></div>
+                
+                <label style="margin-top:16px;">Extra players (optional)</label>
+                <div id="awayExtraList" class="player-list"></div>
+                
+                <input type="hidden" name="away_starters" id="away_starters" value="">
+                <input type="hidden" name="away_extra_players" id="away_extra_players" value="">
+            </div>
+            
+            <div class="section">
+                <h2>4. Referee Crew</h2>
+                <p class="hint">Look up at <a href="https://official.nba.com/referee-assignments/" target="_blank">official.nba.com/referee-assignments</a> (~2 hours pre-tip)</p>
+                
+                <label for="crew_chief">Crew Chief</label>
+                <input type="text" name="crew_chief" id="crew_chief" placeholder="e.g., Scott Foster" required>
+                
+                <label for="referee">Referee</label>
+                <input type="text" name="referee" id="referee" placeholder="e.g., Tony Brothers" required>
+                
+                <label for="umpire">Umpire</label>
+                <input type="text" name="umpire" id="umpire" placeholder="e.g., Marc Davis" required>
+            </div>
+            
+            <button type="submit" class="primary-button" id="submitBtn">
+                Run Hall of Famer Analysis
+            </button>
+            <p class="loading-message" id="loadingMessage" style="display:none;">
+                Analyzing... this takes 1-2 minutes (pulling last 10 games for each player). Don't refresh.
+            </p>
+        </form>
+    </div>
+    
+    <script>
+        // Track selected player IDs per category
+        const selections = {
+            homeStarters: new Set(),
+            homeExtras: new Set(),
+            awayStarters: new Set(),
+            awayExtras: new Set(),
+        };
+        
+        async function loadRoster(teamId, sectionPrefix) {
+            // sectionPrefix: 'home' or 'away'
+            const startersList = document.getElementById(sectionPrefix + 'StartersList');
+            const extraList = document.getElementById(sectionPrefix + 'ExtraList');
+            const section = document.getElementById(sectionPrefix + 'PlayersSection');
+            
+            startersList.innerHTML = '<p class="loading-inline">Loading roster...</p>';
+            extraList.innerHTML = '';
+            section.style.display = 'block';
+            
+            try {
+                const response = await fetch('/api/roster/' + teamId);
+                const players = await response.json();
+                
+                if (!players || players.length === 0) {
+                    startersList.innerHTML = '<p class="error-inline">No roster found</p>';
+                    return;
+                }
+                
+                // Clear and rebuild
+                startersList.innerHTML = '';
+                extraList.innerHTML = '';
+                
+                // Reset selections for this team
+                selections[sectionPrefix + 'Starters'].clear();
+                selections[sectionPrefix + 'Extras'].clear();
+                updateHiddenInputs(sectionPrefix);
+                
+                players.forEach(p => {
+                    // Add to starters list
+                    const starterBtn = makePlayerButton(p, sectionPrefix, 'Starters');
+                    startersList.appendChild(starterBtn);
+                    
+                    // Add to extras list
+                    const extraBtn = makePlayerButton(p, sectionPrefix, 'Extras');
+                    extraList.appendChild(extraBtn);
+                });
+                
+            } catch (error) {
+                startersList.innerHTML = '<p class="error-inline">Failed to load roster: ' + error.message + '</p>';
+            }
+        }
+        
+        function makePlayerButton(player, sectionPrefix, category) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'player-btn';
+            btn.dataset.playerId = player.id;
+            btn.dataset.section = sectionPrefix;
+            btn.dataset.category = category;
+            btn.innerHTML = '<span class="player-name">' + player.name + '</span><span class="player-position">' + (player.position || '') + '</span>';
+            
+            btn.addEventListener('click', function() {
+                togglePlayer(player.id, sectionPrefix, category, btn);
+            });
+            
+            return btn;
+        }
+        
+        function togglePlayer(playerId, sectionPrefix, category, btn) {
+            const setName = sectionPrefix + category;
+            const set = selections[setName];
+            
+            // Also need to know about the OTHER category for this team (mutual exclusivity)
+            const otherCategory = category === 'Starters' ? 'Extras' : 'Starters';
+            const otherSet = selections[sectionPrefix + otherCategory];
+            
+            if (set.has(playerId)) {
+                set.delete(playerId);
+                btn.classList.remove('selected');
+            } else {
+                // If selected as the other category, remove there first
+                if (otherSet.has(playerId)) {
+                    otherSet.delete(playerId);
+                    // Find and unselect the button in the other list
+                    document.querySelectorAll('.player-btn[data-player-id="' + playerId + '"]').forEach(b => {
+                        if (b.dataset.section === sectionPrefix && b.dataset.category === otherCategory) {
+                            b.classList.remove('selected');
+                        }
+                    });
+                }
+                
+                set.add(playerId);
+                btn.classList.add('selected');
+            }
+            
+            updateHiddenInputs(sectionPrefix);
+        }
+        
+        function updateHiddenInputs(sectionPrefix) {
+            document.getElementById(sectionPrefix + '_starters').value = 
+                Array.from(selections[sectionPrefix + 'Starters']).join(',');
+            document.getElementById(sectionPrefix + '_extra_players').value = 
+                Array.from(selections[sectionPrefix + 'Extras']).join(',');
+        }
+        
+        // Wire up team selection -> roster load
+        document.getElementById('home_team_id').addEventListener('change', function(e) {
+            if (e.target.value) {
+                loadRoster(e.target.value, 'home');
+            }
+        });
+        
+        document.getElementById('away_team_id').addEventListener('change', function(e) {
+            if (e.target.value) {
+                loadRoster(e.target.value, 'away');
+            }
+        });
+        
+        // Form submission with validation and loading state
+        document.getElementById('analysisForm').addEventListener('submit', function(e) {
+            // Validate at least one starter per team
+            if (selections.homeStarters.size === 0 || selections.awayStarters.size === 0) {
+                e.preventDefault();
+                alert('Please select at least one starter for each team.');
+                return;
+            }
+            
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = 'Analyzing...';
+            document.getElementById('loadingMessage').style.display = 'block';
+        });
+    </script>
+</body>
+</html>

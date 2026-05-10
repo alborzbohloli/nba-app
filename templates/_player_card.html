@@ -1,0 +1,89 @@
+<div class="player-card verdict-{{ player.verdict|lower }} confidence-{{ player.projection_confidence|lower }}">
+    <div class="player-card-header">
+        <div>
+            <span class="player-card-name">{{ player.player_name }}</span>
+            <span class="player-card-team">{{ player.team }}</span>
+        </div>
+        <div class="player-card-tags">
+            <span class="verdict-tag verdict-{{ player.verdict|lower }}">{{ player.verdict }}</span>
+            <span class="confidence-tag">{{ player.projection_confidence }}</span>
+        </div>
+    </div>
+    
+    {% if player.verdict_reason %}
+    <p class="verdict-reason">
+        {% if player.verdict_reason_code %}<span class="reason-code">{{ player.verdict_reason_code }}</span>{% endif %}
+        {{ player.verdict_reason }}
+    </p>
+    {% endif %}
+    
+    {% if player.projected_stats %}
+    <div class="stat-grid">
+        <div class="stat-cell">
+            <div class="stat-label">MIN</div>
+            <div class="stat-value">{{ player.projected_stats.minutes }}</div>
+            {% if player.season_baseline_stats and player.season_baseline_stats.minutes_avg %}
+            <div class="stat-baseline">avg {{ player.season_baseline_stats.minutes_avg }}</div>
+            {% endif %}
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">PTS</div>
+            <div class="stat-value">{{ player.projected_stats.points }}</div>
+            {% if player.season_baseline_stats and player.season_baseline_stats.points_avg %}
+            <div class="stat-baseline">avg {{ player.season_baseline_stats.points_avg }}</div>
+            {% endif %}
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">REB</div>
+            <div class="stat-value">{{ player.projected_stats.rebounds }}</div>
+            {% if player.season_baseline_stats and player.season_baseline_stats.rebounds_avg %}
+            <div class="stat-baseline">avg {{ player.season_baseline_stats.rebounds_avg }}</div>
+            {% endif %}
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">AST</div>
+            <div class="stat-value">{{ player.projected_stats.assists }}</div>
+            {% if player.season_baseline_stats and player.season_baseline_stats.assists_avg %}
+            <div class="stat-baseline">avg {{ player.season_baseline_stats.assists_avg }}</div>
+            {% endif %}
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">3PM</div>
+            <div class="stat-value">{{ player.projected_stats.threes_made }}</div>
+            {% if player.season_baseline_stats and player.season_baseline_stats.threes_made_avg %}
+            <div class="stat-baseline">avg {{ player.season_baseline_stats.threes_made_avg }}</div>
+            {% endif %}
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">STL</div>
+            <div class="stat-value">{{ player.projected_stats.steals }}</div>
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">BLK</div>
+            <div class="stat-value">{{ player.projected_stats.blocks }}</div>
+        </div>
+        <div class="stat-cell">
+            <div class="stat-label">PRA</div>
+            <div class="stat-value">{{ player.projected_stats.pra }}</div>
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if player.key_factors %}
+    <div class="key-factors">
+        <strong>Key factors tonight:</strong>
+        <ul>
+            {% for factor in player.key_factors %}
+            <li>{{ factor }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    {% if player.betting_recommendations %}
+    <div class="betting-rec">
+        <strong>What to look for on your sportsbook:</strong>
+        <p>{{ player.betting_recommendations }}</p>
+    </div>
+    {% endif %}
+</div>
